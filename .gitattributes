@@ -1,0 +1,11 @@
+# Keep text files as LF in the repository regardless of the contributor's OS,
+# so diffs and CI runs do not churn on Windows checkouts.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+
+package-lock.json -diff

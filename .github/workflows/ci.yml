@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Start the production server and wait for it
+        env:
+          ORBITGENE_STORE: pglite
+        run: |
+          npx next start -p 3000 &
+          # The embedded store starts cold, so give the first migration room.
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/api/health > /dev/null; then
+              echo "server is up after ${i}0s"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "server never became healthy"
+          exit 1
+
+      - name: End-to-end verification
+        # No secrets: the app has no accounts. A session is established by
+        # loading the landing page, exactly as a browser does. The embedded
+        # store keeps this self-contained on the runner.
+        env:
+          ORBITGENE_STORE: pglite
+        run: npm run verify:live -- http://localhost:3000
+
+  live:
+    name: verify the production deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only worth running once a deployment exists, and only on the default
+    # branch. Set DEPLOY_URL as a repository variable to enable it.
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_URL != ''
+    needs: verify
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify the live deployment
+        run: node scripts/verify-live.mjs "${{ vars.DEPLOY_URL }}"

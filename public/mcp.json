@@ -1,0 +1,41 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schemas/2025-06-18/server.schema.json",
+  "name": "io.github.aniruddhaadak80/orbitgene",
+  "description": "Flight-readiness triage for DNA assay hardware. Score a real protein substitution from UniProt against your own optics, probe thermodynamics and the live space radiation environment, then seal the decision into a hash-chained record.",
+  "version": "1.0.0",
+  "websiteUrl": "https://github.com/aniruddhaadak80/orbitgene",
+  "repository": {
+    "url": "https://github.com/aniruddhaadak80/orbitgene",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "orbitgene",
+      "version": "1.0.0",
+      "transport": {
+        "type": "http",
+        "url": "https://orbitgene-aniruddha-adaks-projects.vercel.app/api/mcp"
+      },
+      "runtimeHint": "nodejs22"
+    },
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "orbitgene",
+      "version": "1.0.0",
+      "transport": {
+        "type": "http",
+        "url": "https://orbitgene-aniruddha-adaks-projects.vercel.app/api/mcp"
+      },
+      "runtimeHint": "python311"
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://orbitgene-aniruddha-adaks-projects.vercel.app/api/mcp"
+    }
+  ]
+}

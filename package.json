@@ -1,0 +1,61 @@
+{
+  "name": "orbitgene",
+  "version": "1.0.0",
+  "private": false,
+  "description": "Flight-readiness triage for DNA assay hardware: score real protein substitutions against probe thermodynamics, detector optics and the live space radiation environment, then seal the decision into a hash-chained record.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "verify:live": "node scripts/verify-live.mjs",
+    "probe:sources": "node --import tsx scripts/source-probe.ts",
+    "probe:store": "node scripts/pglite-probe.mjs",
+    "test:browser": "node scripts/test-browser.mjs",
+    "capture": "node scripts/capture-screenshots.mjs"
+  },
+  "keywords": [
+    "genetics",
+    "dna",
+    "protein",
+    "uniprot",
+    "clinvar",
+    "refseq",
+    "space-weather",
+    "radiation",
+    "mcp",
+    "model-context-protocol",
+    "bioinformatics",
+    "probes",
+    "nextjs"
+  ],
+  "dependencies": {
+    "@electric-sql/pglite": "^0.3.14",
+    "@huggingface/transformers": "^4.3.0",
+    "@neondatabase/serverless": "^1.0.2",
+    "framer-motion": "^12.34.1",
+    "lucide-react": "^0.562.0",
+    "next": "16.3.8",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.8",
+    "playwright": "^1.57.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.20.7",
+    "typescript": "^5"
+  }
+}
