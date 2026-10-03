@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import { AA_NAMES, RESIDUES } from '@/lib/genetics';
 import { clinVarSubstitutionQuery } from '@/lib/sources/ncbi';
+import { classifyClinicalLookup } from '@/lib/services/assays';
 
 describe('AA_NAMES', () => {
   it('covers every standard residue with a UniProt three-letter code', () => {
@@ -62,5 +63,67 @@ describe('clinVarSubstitutionQuery', () => {
     // happily query for Ter72Gln and report "no record found".
     assert.equal(clinVarSubstitutionQuery('TP53', 'Q', 72, '*'), null);
     assert.equal(clinVarSubstitutionQuery('TP53', '*', 1, 'A'), null);
+  });
+});
+describe('classifyClinicalLookup', () => {
+  const now = '2026-10-03T00:00:00.000Z';
+  const hit = {
+    accession: 'VCV000012374',
+    accessionVersion: 'VCV000012374.2',
+    title: 'NM_000546.6(TP53):c.524G>A',
+    proteinChange: 'R175H',
+    significance: 'Pathogenic',
+    reviewStatus: 'reviewed by expert panel',
+    lastEvaluated: '2024/09/06 00:00',
+    trait: 'Li-Fraumeni syndrome',
+    url: 'https://www.ncbi.nlm.nih.gov/clinvar/variation/VCV000012374/',
+  };
+
+  it('reports a classification it actually retrieved', () => {
+    const result = classifyClinicalLookup({ hit, query: 'TP53[gene] AND Arg175His' }, now);
+    assert.equal(result.status, 'reported');
+    assert.equal(result.hit?.accession, 'VCV000012374');
+    assert.equal(result.source.status, 'live');
+    assert.match(result.source.note, /Pathogenic/);
+    assert.match(result.source.note, /reviewed by expert panel/);
+    assert.equal(result.source.url, hit.url);
+  });
+
+  it('says "not-reported" only when ClinVar was searched and held nothing', () => {
+    const result = classifyClinicalLookup({ hit: null, query: 'TP53[gene] AND Gln72Ter' }, now);
+    assert.equal(result.status, 'not-reported');
+    assert.equal(result.hit, null);
+    assert.equal(result.source.status, 'live');
+    assert.match(result.source.note, /Absence of a record is not evidence/);
+  });
+
+  it('never reports an upstream failure as "not-reported"', () => {
+    // This is the case that matters: NCBI rate-limits, and a lookup that was
+    // never completed must not be indistinguishable from one that found nothing.
+    const result = classifyClinicalLookup(
+      { hit: null, query: 'TP53[gene] AND Arg175His', failure: 'HTTP 429 rate limited' },
+      now,
+    );
+    assert.equal(result.status, 'unavailable');
+    assert.equal(result.hit, null);
+    assert.equal(result.source.status, 'fallback');
+    assert.match(result.source.note, /upstream failure/);
+    assert.match(result.source.note, /429/);
+    assert.doesNotMatch(result.source.note, /Absence of a record/);
+  });
+
+  it('treats an unbuildable query as unavailable rather than unreported', () => {
+    const result = classifyClinicalLookup({ hit: null, query: '' }, now);
+    assert.equal(result.status, 'unavailable');
+    assert.equal(result.source.status, 'fallback');
+  });
+
+  it('keeps the three statuses distinct', () => {
+    const statuses = new Set([
+      classifyClinicalLookup({ hit, query: 'q' }, now).status,
+      classifyClinicalLookup({ hit: null, query: 'q' }, now).status,
+      classifyClinicalLookup({ hit: null, query: 'q', failure: 'boom' }, now).status,
+    ]);
+    assert.equal(statuses.size, 3);
   });
 });

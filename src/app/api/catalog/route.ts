@@ -56,17 +56,25 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const profile = await loadGeneProfile(accession, { fresh: refresh });
 
-    const annotated = [...profile.evidence]
-      .sort((a, b) => a.position - b.position)
-      .slice(0, 80)
-      .map((e) => ({
-        position: e.position,
-        refAa: e.refAa,
-        altAas: e.altAas,
-        kind: e.source === 'uniprot-mutagenesis' ? 'mutagenesis' : 'natural-variant',
-        description: e.description,
-        publications: e.publications,
-      }));
+    /**
+ * Annotations and sites are capped for payload size, but the caps are reported
+ * alongside the arrays. Without the totals the UI has to choose between showing
+ * only a subset while calling it the whole entry, or contradicting the source
+ * note, which counts everything UniProt returned.
+ */
+const ANNOTATION_LIMIT = 80;
+const SITE_LIMIT = 160;
+
+    const sortedEvidence = [...profile.evidence].sort((a, b) => a.position - b.position);
+
+    const annotated = sortedEvidence.slice(0, ANNOTATION_LIMIT).map((e) => ({
+      position: e.position,
+      refAa: e.refAa,
+      altAas: e.altAas,
+      kind: e.source === 'uniprot-mutagenesis' ? 'mutagenesis' : 'natural-variant',
+      description: e.description,
+      publications: e.publications,
+    }));
 
     return ok({
       gene: {
@@ -82,8 +90,11 @@ export async function GET(request: Request): Promise<NextResponse> {
         sequenceChecksum: profile.gene.sequenceChecksum,
         fetchedAt: profile.gene.fetchedAt,
       },
-      sites: profile.sites.slice(0, 160),
+      sites: profile.sites.slice(0, SITE_LIMIT),
+      siteTotal: profile.sites.length,
       annotated,
+      annotatedTotal: sortedEvidence.length,
+      annotatedLimit: ANNOTATION_LIMIT,
       sources: profile.sources,
     });
   });

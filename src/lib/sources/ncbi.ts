@@ -383,14 +383,35 @@ export function clinVarSubstitutionQuery(
   return `${symbol}[gene] AND ${refName}${proteinPosition}${altName}`;
 }
 
+/**
+ * Looks up one exact protein substitution in ClinVar.
+ *
+ * ClinVar indexes UniProt-style three-letter protein changes, so
+ * `BRCA1[gene] AND Ile26Phe` resolves to a single variation record rather than
+ * to the tens of thousands of variants the gene itself carries. That precision
+ * matters: a gene-level count would say nothing about whether the substitution
+ * on this plate is the one a clinician has already classified.
+ *
+ * `failure` is set only when the upstream call itself failed. It is never
+ * collapsed into "no record": a rate-limited lookup and an unsearched
+ * substitution look identical to a caller otherwise, and reporting the first as
+ * the second would tell a reader that ClinVar has nothing on a variant nobody
+ * managed to ask about.
+ */
 export async function searchClinVarSubstitution(
   geneSymbol: string,
   refAa: string,
   proteinPosition: number,
   altAa: string,
-): Promise<{ hit: ClinVarSubstitution | null; query: string; url: string }> {
+): Promise<{
+  hit: ClinVarSubstitution | null;
+  query: string;
+  url: string;
+  /** Present when the lookup could not complete. Absence means "searched". */
+  failure?: string;
+}> {
   const term = clinVarSubstitutionQuery(geneSymbol, refAa, proteinPosition, altAa);
-  if (!term) return { hit: null, query: '', url: '' };
+  if (!term) return { hit: null, query: '', url: '', failure: 'the query could not be built' };
 
   const searchUrl = `${EUTILS}/esearch.fcgi?db=clinvar&term=${encodeURIComponent(term)}&retmax=5&retmode=json`;
 
@@ -431,7 +452,8 @@ export async function searchClinVarSubstitution(
       url: searchUrl,
     };
   } catch (error) {
-    console.warn(`[orbitgene] ClinVar lookup failed for ${term}:`, error);
-    return { hit: null, query: term, url: searchUrl };
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[orbitgene] ClinVar lookup failed for ${term}:`, message);
+    return { hit: null, query: term, url: searchUrl, failure: message };
   }
 }

@@ -30,11 +30,27 @@ const shot = async (name, options = {}) => {
 
 const settle = () => page.waitForLoadState('networkidle').catch(() => {});
 
+/** The verdict pill is the signal that a score has actually rendered. */
+const SCORED = /FLIGHT-GO|GROUND-ONLY|REDESIGN-PROBE|HOLD-FOR-EVIDENCE/;
+
+const waitForScore = async (page, label) => {
+  const scored = await page
+    .locator('body')
+    .filter({ hasText: SCORED })
+    .first()
+    .waitFor({ state: 'visible', timeout: 240000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!scored) console.warn(`  (${label}: no score rendered yet, capturing anyway)`);
+  return scored;
+};
+
 try {
   console.log(`Capturing ${BASE}`);
 
   await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 180000 });
-  await settle();
+  await waitForScore(page, 'landing');
+  await page.waitForTimeout(1200);
   await shot('01-landing', { fullPage: true });
 
   // Workbench with a scored variant, ClinVar line and the factor ledger.
@@ -42,12 +58,8 @@ try {
     waitUntil: 'domcontentloaded',
     timeout: 180000,
   });
-  await page
-    .locator('button', { hasText: 'Run locally' })
-    .first()
-    .waitFor({ state: 'visible', timeout: 240000 })
-    .catch(() => console.warn('  (no score rendered, capturing anyway)'));
-  await page.waitForTimeout(1500);
+  await waitForScore(page, 'workbench');
+  await page.waitForTimeout(1200);
   await shot('02-workbench-scored', { fullPage: true });
 
   // The local model having actually produced a ranking.

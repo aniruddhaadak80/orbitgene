@@ -119,7 +119,7 @@ export const CATALOG_SEED: Array<{
     symbol: 'BRCA1',
     name: 'Breast cancer type 1 susceptibility protein',
     blurb:
-      'The double-strand break repair scaffold. 170 annotated natural variants and 27 experimentally-characterised mutagenesis sites make it the densest single gene for testing a triage model.',
+      'The double-strand break repair scaffold. A zinc-finger RING domain early in the chain followed by a long coiled-coil, so a substitution inside the domain and one in the tail are genuinely different problems. Its curated annotations describe function, not just position.',
     featuredPosition: 26,
     featuredRefAa: 'I',
     featuredAltAa: 'F',
@@ -204,6 +204,27 @@ export const CATALOG_SEED: Array<{
   },
 ];
 
+/**
+ * Corrections to rows that have already been seeded.
+ *
+ * Kept as migrations rather than seed edits because the catalogue is only seeded
+ * when empty: editing a blurb in the seed above would leave every existing
+ * deployment showing the old text forever.
+ */
+export const CORRECTIONS: Array<{ id: string; statements: string[] }> = [
+  {
+    id: '0003_catalog_blurb_accuracy',
+    statements: [
+      // The original BRCA1 blurb claimed "170 annotated natural variants and 27
+      // experimentally-characterised mutagenesis sites". UniProt actually holds
+      // 76 and 4 for this accession, so those numbers were invented. The
+      // replacement describes structure, which is a fact about the protein, and
+      // leaves the annotation count to be read live from the retrieved entry.
+      `update gene_catalog set blurb = 'The double-strand break repair scaffold. A zinc-finger RING domain early in the chain followed by a long coiled-coil, so a substitution inside the domain and one in the tail are genuinely different problems. Its curated annotations describe function, not just position.' where accession = 'P38398'`,
+    ],
+  },
+];
+
 export async function migrate(db: Db): Promise<string[]> {
   const applied: string[] = [];
 
@@ -217,7 +238,7 @@ export async function migrate(db: Db): Promise<string[]> {
      )`,
   );
 
-  for (const migration of MIGRATIONS) {
+  for (const migration of [...MIGRATIONS, ...CORRECTIONS]) {
     const existing = await db.query<{ id: string }>(
       `select id from schema_migrations where id = $1`,
       [migration.id],
@@ -271,4 +292,4 @@ export async function ensureSchema(db: Db): Promise<void> {
   await seedCatalog(db);
 }
 
-export const LATEST_MIGRATION = MIGRATIONS[MIGRATIONS.length - 1].id;
+export const LATEST_MIGRATION = [...MIGRATIONS, ...CORRECTIONS].at(-1)!.id;

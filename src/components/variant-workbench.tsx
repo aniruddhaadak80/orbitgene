@@ -43,7 +43,11 @@ interface GeneResponse {
     fetchedAt: string;
   };
   sites: AnnotatedSite[];
+  siteTotal: number;
   annotated: Annotated[];
+  /** Total annotations UniProt returned, before the response capped the list. */
+  annotatedTotal: number;
+  annotatedLimit: number;
   sources: SourceMeta[];
 }
 
@@ -444,7 +448,11 @@ export function VariantWorkbench() {
             <Panel>
               <PanelHeading
                 title="Annotated residues"
-                detail={`${gene.annotated.length} curated variant or mutagenesis sites in this entry.`}
+                detail={
+        gene.annotatedTotal > gene.annotated.length
+          ? `Showing the first ${gene.annotated.length} of ${gene.annotatedTotal} curated variant or mutagenesis sites UniProt holds for this entry.`
+          : `${gene.annotatedTotal} curated variant or mutagenesis sites in this entry.`
+      }
               />
               {gene.annotated.length === 0 ? (
                 <p className="text-[0.76rem] leading-relaxed text-ink-faint">

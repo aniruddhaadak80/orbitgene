@@ -41,46 +41,24 @@ export function LandingDemo() {
   const [loading, setLoading] = useState(true);
   const [scoring, setScoring] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/catalog')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`catalog responded ${r.status}`))))
-      .then((body: { catalog: CatalogEntry[] }) => {
-        if (cancelled) return;
-        setCatalog(body.catalog);
-        if (body.catalog[0]) setSelected(body.catalog[0].accession);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const entry = catalog.find((c) => c.accession === selected);
-
   /**
-   * Performs the score request. Never called from an effect body: the catalog
-   * effect awaits this promise and applies the result in its own callback, and
-   * the controls call it directly, so no state is written synchronously inside
-   * an effect.
+   * Scores one catalogue entry.
+   *
+   * The entry is passed in rather than looked up from `catalog` on purpose. The
+   * first score happens from a mount-time effect, where `catalog` is still the
+   * empty array, so a closure over that state would always fail to find the gene
+   * and the demo would greet every visitor with "choose a gene first" while
+   * showing a gene already selected.
    */
-  const fetchScore = useCallback(async (accession: string, fresh: boolean): Promise<ScoreResponse> => {
-    const target = catalog.find((c) => c.accession === accession);
-    if (!target) throw new Error('choose a gene first');
-
+  const fetchScore = useCallback(async (entry: CatalogEntry, fresh: boolean): Promise<ScoreResponse> => {
     const response = await fetch('/api/score', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        accession: target.accession,
-        proteinPosition: target.featured.proteinPosition,
-        refAa: target.featured.refAa,
-        altAa: target.featured.altAa,
+        accession: entry.accession,
+        proteinPosition: entry.featured.proteinPosition,
+        refAa: entry.featured.refAa,
+        altAa: entry.featured.altAa,
         fresh,
       }),
     });
@@ -89,14 +67,15 @@ export function LandingDemo() {
       throw new Error('error' in body ? body.error.message : `scoring failed (${response.status})`);
     }
     return body;
-  }, [catalog]);
+  }, []);
 
   const run = useCallback(
-    async (accession: string, fresh = false) => {
+    async (entry: CatalogEntry, fresh = false) => {
+      setSelected(entry.accession);
       setScoring(true);
       setError(null);
       try {
-        setData(await fetchScore(accession, fresh));
+        setData(await fetchScore(entry, fresh));
       } catch (e) {
         setError(e instanceof Error ? e.message : 'scoring failed');
       } finally {
@@ -114,11 +93,18 @@ export function LandingDemo() {
         if (cancelled) return;
         setCatalog(body.catalog);
         const first = body.catalog[0];
-        if (first) {
-          setSelected(first.accession);
-          // Scored here, in the promise callback, rather than from an effect body.
-          setScoring(true);
-          setData(await fetchScore(first.accession, false));
+        if (!first) return;
+        setSelected(first.accession);
+        setScoring(true);
+        // Awaited inside the promise callback, so no state is written
+        // synchronously from an effect body.
+        try {
+          const scored = await fetchScore(first, false);
+          if (!cancelled) setData(scored);
+        } catch (e) {
+          if (!cancelled) setError(e instanceof Error ? e.message : 'scoring failed');
+        } finally {
+          if (!cancelled) setScoring(false);
         }
       })
       .catch((e: Error) => {
@@ -132,6 +118,8 @@ export function LandingDemo() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const entry = catalog.find((c) => c.accession === selected);
 
   return (
     <div className="plate relative overflow-hidden p-5 sm:p-6">
@@ -168,9 +156,8 @@ export function LandingDemo() {
               id="landing-gene"
               value={selected}
               onChange={(e) => {
-                const next = e.target.value;
-                setSelected(next);
-                void run(next);
+                const next = catalog.find((c) => c.accession === e.target.value);
+                if (next) void run(next);
               }}
               className="data min-w-[13rem] rounded-md border border-rim bg-[#0a0e13] px-3 py-2 text-sm text-ink"
             >
@@ -182,7 +169,7 @@ export function LandingDemo() {
             </select>
             <button
               type="button"
-              onClick={() => void run(selected, true)}
+              onClick={() => entry && void run(entry, true)}
               disabled={!selected || scoring}
               className="inline-flex items-center gap-2 rounded-md border border-rim px-3 py-2 text-[0.78rem] text-ink-dim transition-colors hover:border-signal/60 hover:text-signal disabled:opacity-50"
             >

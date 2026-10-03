@@ -25,6 +25,7 @@ import type {
   AssayRecord,
   AssayStatus,
   ClinicalContext,
+  ClinVarSubstitution,
   SealedResult,
   SourceMeta,
   GeneProfile,
@@ -126,11 +127,26 @@ async function loadClinicalContext(
 ): Promise<ClinicalContext> {
   const now = new Date().toISOString();
   const result = await searchClinVarSubstitution(geneSymbol, refAa, proteinPosition, altAa);
+  return classifyClinicalLookup(result, now);
+}
 
-  if (!result.query) {
+/**
+ * Maps a ClinVar lookup outcome onto the status a reader sees.
+ *
+ * Split out as a pure function because this single branch is the difference
+ * between "ClinVar searched and holds nothing" and "ClinVar was never reached",
+ * and a rate-limited lookup that renders as the first one tells a reader that
+ * ClinVar has nothing on a variant nobody managed to ask about.
+ */
+export function classifyClinicalLookup(
+  result: { hit: ClinVarSubstitution | null; query: string; failure?: string },
+  now: string,
+): ClinicalContext {
+  if (result.failure || !result.query) {
+    const reason = result.failure ?? 'the wild-type residue could not be resolved';
     return {
       status: 'unavailable',
-      query: '',
+      query: result.query,
       hit: null,
       source: {
         id: 'clinvar',
@@ -138,7 +154,7 @@ async function loadClinicalContext(
         status: 'fallback',
         url: 'https://www.ncbi.nlm.nih.gov/clinvar/',
         fetchedAt: now,
-        note: 'The wild-type residue could not be resolved, so no clinical lookup was attempted.',
+        note: `The ClinVar lookup did not complete: ${reason}. This is an upstream failure, not a statement about the variant.`,
       },
     };
   }
@@ -163,7 +179,12 @@ async function loadClinicalContext(
         note: `No ClinVar record matches "${result.query}". Absence of a record is not evidence of benignity.`,
       };
 
-  return { status: result.hit ? 'reported' : 'not-reported', query: result.query, hit: result.hit, source };
+  return {
+    status: result.hit ? 'reported' : 'not-reported',
+    query: result.query,
+    hit: result.hit,
+    source,
+  };
 }
 
 export interface CreateParams extends Omit<ScoreRequest, 'instrumentId' | 'flightProfileId'> {
