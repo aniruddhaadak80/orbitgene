@@ -55,20 +55,19 @@ jobs:
           echo "server never became healthy"
           exit 1
 
-      - name: Warm the gene profile cache
-        env:
-          ORBITGENE_STORE: pglite
-        # A cold gene resolve is fifteen to twenty seconds of upstream calls. On a
-        # fresh runner the first request for a gene pays that in full, which makes
-        # the end-to-end suite slow and, on an unlucky runner, long enough to be
-        # cut off mid-request. Warming first makes the suite measure the app rather
-        # than the weather. This is also the step a fresh deployment needs.
-        run: node scripts/warm-cache.mjs http://localhost:3000
-
       - name: End-to-end verification
         # No secrets: the app has no accounts. A session is established by
-        # loading the landing page, exactly as a browser does. The embedded
-        # store keeps this self-contained on the runner.
+        # loading the landing page, exactly as a browser does. The embedded store
+        # keeps this self-contained on the runner.
+        #
+        # REQUIRE_UPSTREAM is deliberately not set. GitHub runners are frequently
+        # blocked by NCBI and UniProt, and 7 of 8 catalogue genes fail there in
+        # under a second each. Failing this build on another organisation's
+        # uptime teaches everyone to ignore red. The suite detects the blocked
+        # network, falls back to the sealed samples the app ships for exactly
+        # this case, and still asserts persistence, seals, replay, MCP and
+        # session isolation. Live-data assertions run against the real deployment,
+        # where a regression would actually be ours, via the `live` job below.
         env:
           ORBITGENE_STORE: pglite
         run: npm run verify:live -- http://localhost:3000
@@ -90,4 +89,8 @@ jobs:
           node-version: 22
 
       - name: Verify the live deployment
+        env:
+          # Strict: if UniProt or RefSeq are down here, that is our deployment's
+          # problem and the run should say so.
+          REQUIRE_UPSTREAM: '1'
         run: node scripts/verify-live.mjs "${{ vars.DEPLOY_URL }}"

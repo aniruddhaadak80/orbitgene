@@ -40,6 +40,22 @@ npm run verify:live                          # against localhost:3000
 npm run verify:live -- https://your.vercel.app
 ```
 
+Two environment variables change how it treats the outside world:
+
+- `REQUIRE_UPSTREAM=1` fails the run when UniProt or NCBI cannot be reached.
+  Use it against a real deployment, where a live-data regression genuinely is our
+  problem. It is off by default because CI runners are frequently blocked by
+  both upstreams, and gating this repository's build on another organisation's
+  uptime teaches everyone to ignore red.
+- `SIMULATE_NO_UPSTREAM=1` forces the unreachable path, so you can exercise the
+  sealed-sample fallback on a machine that does have network. The suite then
+  discovers a scoreable substitution on `P01308` using only the public API and
+  still asserts persistence, seals, replay, MCP and isolation.
+
+`npm run warm -- https://your.vercel.app` resolves and caches every catalogue
+gene. Worth running after a deploy, because the first visitor to ask for a gene
+would otherwise pay fifteen to twenty seconds of upstream calls.
+
 `npm run probe:sources` prints whether each catalogue gene currently resolves
 from UniProt and RefSeq. It is the quickest way to tell an upstream outage from
 a bug in this repository.
