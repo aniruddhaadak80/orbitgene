@@ -37,6 +37,7 @@ yarn-error.log*
 # local embedded store (PGlite) and scratch output
 /.orbitgene
 /screenshots
+!/docs/screenshots/
 
 # vercel
 .vercel

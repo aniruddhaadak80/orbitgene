@@ -16,11 +16,13 @@ Code: **[github.com/aniruddhaadak80/orbitgene](https://github.com/aniruddhaadak8
 
 No account. No API key. Nothing to sign up for.
 
-![The landing page: a plate of 96 wells next to a live readiness read](https://orbitgene.vercel.app/opengraph-image)
+![ORBITGENE: 96-well plate beside a live readiness read for BRCA1](docs/screenshots/01-landing.png)
 
 ---
 
 ## Try it in about twenty seconds
+
+![The variant workbench with a scored BRCA1 substitution, the ClinVar line, and the factor ledger](docs/screenshots/02-workbench-scored.png)
 
 1. Open **[orbitgene.vercel.app/variants](https://orbitgene.vercel.app/variants)**.
 2. Leave `BRCA1 - P38398`, position `26`, alternate residue `F`.
@@ -107,6 +109,12 @@ over a mission, expected single-event upsets in the sample buffer, and the
 number of redundant readouts needed to push corruption probability below an
 acceptable bound. Move the shielding slider and the budget re-derives.
 
+![Flight budget showing three orbit profiles, a shielding attenuation curve, and the constants behind the model](docs/screenshots/05-flight-budget.png)
+
+When NOAA cannot be reached the page says so in place rather than substituting a
+plausible number. The screenshot above caught GOES returning 404 while the
+planetary K index still came through, and it reports exactly that.
+
 ### An audit chain you can actually replay
 
 Every create, update, decision and retirement appends an event to a SHA-384 hash
@@ -117,6 +125,8 @@ afternoon cannot silently overwrite the state you are looking at.
 Retirement leaves a tombstone rather than deleting the row, so the history stays
 replayable afterwards. `/verify` replays any chain from its genesis value and
 reports the first event that does not line up.
+
+![Replaying a sealed audit chain from its genesis value](docs/screenshots/07-integrity-replay.png)
 
 ### ClinVar, UniProt, RefSeq and NOAA, each labelled
 
@@ -156,6 +166,8 @@ chain, so you can tell what a human did from what their agent did.
 }
 ```
 
+![The MCP agent console listing nine tools](docs/screenshots/06-mcp-agent.png)
+
 ### Open-source AI at the core, running on your machine
 
 The engine is deterministic on purpose, which makes it trustworthy and
@@ -163,6 +175,8 @@ reviewable but bad at one job: explaining itself in prose. So the factor ledger
 is handed to **`Xenova/nli-deberta-v3-xsmall`**, a 70 MB open-weight
 natural-language-inference model, running in the browser through
 `@huggingface/transformers` on **WebGPU**.
+
+![The local model's ranked diagnoses, showing that it ran on WebGPU in the browser](docs/screenshots/03-local-model-explanation.png)
 
 It answers one question: which of five diagnoses does this evidence best
 support? On the BRCA1 example above it returns *"a probe that no longer
