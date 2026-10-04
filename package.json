@@ -18,7 +18,8 @@
     "probe:sources": "node --import tsx scripts/source-probe.ts",
     "probe:store": "node scripts/pglite-probe.mjs",
     "test:browser": "node scripts/test-browser.mjs",
-    "capture": "node scripts/capture-screenshots.mjs"
+    "capture": "node scripts/capture-screenshots.mjs",
+    "warm": "node scripts/warm-cache.mjs"
   },
   "keywords": [
     "genetics",

@@ -6,6 +6,16 @@ import { fail, fromValidation, ok, withOwner } from '@/lib/http';
 import { substitutionDial } from '@/lib/genetics';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Resolving a gene can take twenty seconds on a cold cache, because every
+ * candidate transcript is fetched and translated until one matches the UniProt
+ * protein. The default serverless budget is shorter than that, and a request
+ * killed mid-flight surfaces as "upstream unavailable", which blames UniProt for
+ * our own timeout. The persistent profile cache means this budget is only ever
+ * spent on the very first resolve of a given accession.
+ */
+export const maxDuration = 60;
 export const runtime = 'nodejs';
 
 /**

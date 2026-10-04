@@ -11,7 +11,7 @@ export const site = {
   description:
     'Import a real protein substitution from UniProt, RefSeq and ClinVar, score it against your own assay optics, probe thermodynamics and the live NOAA space weather, then seal the decision into a hash-chained, exportable assay record.',
   /** Verified production alias. Propagated by the ship step. */
-  liveUrl: 'https://orbitgene-aniruddha-adaks-projects.vercel.app',
+  liveUrl: 'https://orbitgene.vercel.app',
   repoUrl: 'https://github.com/aniruddhaadak80/orbitgene',
   repoSlug: 'aniruddhaadak80/orbitgene',
   repoNoun: 'View source',

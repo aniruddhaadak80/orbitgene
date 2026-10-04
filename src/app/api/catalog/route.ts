@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { loadGeneProfile } from '@/lib/sources/gene';
+import { resolveGeneProfile } from '@/lib/services/assays';
 import { isValidAccession } from '@/lib/sources/uniprot';
 import { fail, ok, withOwner } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Resolving a gene can take twenty seconds on a cold cache, because every
+ * candidate transcript is fetched and translated until one matches the UniProt
+ * protein. The default serverless budget is shorter than that, and a request
+ * killed mid-flight surfaces as "upstream unavailable", which blames UniProt for
+ * our own timeout. The persistent profile cache means this budget is only ever
+ * spent on the very first resolve of a given accession.
+ */
+export const maxDuration = 60;
 export const runtime = 'nodejs';
 
 /**
@@ -54,7 +64,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       return fail(400, 'invalid-accession', 'Provide a UniProt accession such as P38398.');
     }
 
-    const profile = await loadGeneProfile(accession, { fresh: refresh });
+    const profile = await resolveGeneProfile(accession, { fresh: refresh });
 
     /**
  * Annotations and sites are capped for payload size, but the caps are reported

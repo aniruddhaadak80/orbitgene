@@ -65,6 +65,23 @@ or fall back visibly.
 chain. Update and retire both append a new event and recompute the SHA-384
 chain. Retirement leaves a tombstone so replay still works afterwards.
 
+**Migrations are immutable.** They are recorded by id, so editing the SQL of a
+migration that has already run changes nothing on any existing database — the
+statement is simply skipped, silently. If you need a different statement, add a
+new id. This repository learned that the hard way: two corrections were written
+into a migration that had already shipped and had to be reissued as `0006`.
+
+**The catalogue is checked against reality, not against itself.** The featured
+residue in each seeded entry must match the retrieved coding sequence, and the
+substitute must be reachable by a single base change. The engine now refuses a
+reference residue that disagrees with the CDS, so drift surfaces as an error
+rather than a confident score about a residue that is not there. To re-check the
+catalogue against live UniProt and RefSeq:
+
+```bash
+node scripts/probe-seed-truth.mjs http://localhost:3000
+```
+
 **Tests fail before they pass.** If you fix a bug, add the test that was red.
 The engine, thermodynamics, genetics, radiation, canonical serialisation, and
 integrity chain all have unit tests in `tests/`.

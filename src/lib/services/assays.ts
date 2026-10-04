@@ -4,6 +4,7 @@ import { translateCodon } from '../genetics';
 import { getDb, type Db } from '../db';
 import { findFlight, findInstrument } from '../profiles';
 import { loadGeneProfile, type LoadOptions } from '../sources/gene';
+import { invalidateCachedProfile, readCachedProfile, writeCachedProfile } from '../repo/gene-profiles';
 import { searchClinVarSubstitution } from '../sources/ncbi';
 import { loadSpaceWeather } from '../sources/spaceweather';
 import {
@@ -75,14 +76,70 @@ export function observedResidue(profile: GeneProfile, proteinPosition: number): 
   return residue === 'X' ? null : residue;
 }
 
+/**
+ * Checks a caller-supplied reference residue against the retrieved coding
+ * sequence.
+ *
+ * The retrieved CDS is the authority on what the wild type is at a position. A
+ * reference that disagrees with it describes a substitution that does not exist,
+ * so scoring it would produce a confident, well-evidenced verdict about a
+ * residue that was never there. This returns a reason to reject, or null when
+ * the reference agrees or was omitted.
+ *
+ * This check is the reason the catalogue's featured positions cannot silently
+ * drift away from the sequences UniProt now serves: a mismatch is reported
+ * instead of scored.
+ */
+export function referenceMismatchReason(
+  profile: GeneProfile,
+  proteinPosition: number,
+  refAa: string | undefined,
+): string | null {
+  if (!refAa) return null;
+
+  const observed = observedResidue(profile, proteinPosition);
+  if (observed === null) return null;
+
+  const claimed = refAa.trim().toUpperCase();
+  if (claimed === observed) return null;
+
+  return (
+    `Position ${proteinPosition} of ${profile.gene.geneSymbol} is ${observed} in the retrieved ` +
+    `${profile.gene.refseqMrna} coding sequence, not ${claimed}. ` +
+    `Scoring ${claimed} would describe a substitution that does not exist in this transcript.`
+  );
+}
+
 export async function score(
   request: ScoreRequest,
   options: LoadOptions = {},
 ): Promise<ScoreResponse> {
   const [profile, weather] = await Promise.all([
-    loadGeneProfile(request.accession, options),
+    resolveGeneProfile(request.accession, options),
     loadSpaceWeather(),
   ]);
+
+  const mismatch = referenceMismatchReason(profile, request.proteinPosition, request.refAa);
+  if (mismatch) {
+    return {
+      outcome: { ok: false, reason: mismatch },
+      profile,
+      weather,
+      clinical: {
+        status: 'unavailable',
+        query: '',
+        hit: null,
+        source: {
+          id: 'clinvar',
+          label: 'ClinVar',
+          status: 'fallback',
+          url: 'https://www.ncbi.nlm.nih.gov/clinvar/',
+          fetchedAt: new Date().toISOString(),
+          note: 'No lookup was attempted, because the requested reference residue does not match the coding sequence.',
+        },
+      },
+    };
+  }
 
   const refAa = request.refAa || observedResidue(profile, request.proteinPosition) || '';
 
@@ -185,6 +242,53 @@ export function classifyClinicalLookup(
     hit: result.hit,
     source,
   };
+}
+
+/**
+ * Reads a gene profile through the persistent cache.
+ *
+ * The cache is authoritative for speed but never for truth: a cache miss falls
+ * through to the live retriever, and the retriever's own fallback rules still
+ * apply, so a sealed fallback is cached too and stays labelled `fallback` rather
+ * than being upgraded to `live` by having been stored once.
+ *
+ * A cache write failure is logged and ignored. A slow answer is better than an
+ * error, and the next request will simply pay the upstream cost again.
+ */
+export async function resolveGeneProfile(
+  accession: string,
+  options: LoadOptions = {},
+): Promise<GeneProfile> {
+  const bare = accession.split('_')[0].toUpperCase();
+
+  let db: Db | null = null;
+  try {
+    db = await getDb();
+  } catch (error) {
+    console.warn('[orbitgene] profile cache unavailable:', error instanceof Error ? error.message : error);
+  }
+
+  if (db && !options.fresh) {
+    try {
+      const cached = await readCachedProfile(db, bare);
+      if (cached) return cached.profile;
+    } catch (error) {
+      console.warn(`[orbitgene] profile cache read failed for ${bare}:`, error);
+    }
+  }
+
+  const profile = await loadGeneProfile(bare, options);
+
+  if (db) {
+    try {
+      if (options.fresh) await invalidateCachedProfile(db, bare);
+      await writeCachedProfile(db, bare, profile);
+    } catch (error) {
+      console.warn(`[orbitgene] profile cache write failed for ${bare}:`, error);
+    }
+  }
+
+  return profile;
 }
 
 export interface CreateParams extends Omit<ScoreRequest, 'instrumentId' | 'flightProfileId'> {

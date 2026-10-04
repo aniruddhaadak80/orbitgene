@@ -97,6 +97,21 @@ export const MIGRATIONS: Array<{ id: string; statements: string[] }> = [
        )`,
     ],
   },
+{
+    id: '0004_gene_profile_cache',
+    statements: [
+      // Resolving a gene costs fifteen to twenty seconds of upstream calls, which
+      // a serverless cold start pays on the visitor's first request and which
+      // then risks a function timeout. The resolved profile is kept here so every
+      // later request is a single row read.
+      `create table if not exists gene_profiles (
+         accession text primary key,
+         payload jsonb not null,
+         resolved_at timestamptz not null default now()
+       )`,
+      `create index if not exists gene_profiles_resolved_idx on gene_profiles (resolved_at)`,
+    ],
+  },
 ];
 
 /**
@@ -154,7 +169,7 @@ export const CATALOG_SEED: Array<{
     blurb:
       'A coiled-coil dimerisation partner followed by a structured DNA-binding domain, which gives the structural-context factor two very different answers depending on position.',
     featuredPosition: 31,
-    featuredRefAa: 'V',
+    featuredRefAa: 'R',
     featuredAltAa: 'I',
     sortOrder: 4,
   },
@@ -165,19 +180,19 @@ export const CATALOG_SEED: Array<{
     blurb:
       'A small helix-rich dimerisation partner. Almost every residue sits in an annotated helix, which is the honest worst case for a probe design.',
     featuredPosition: 60,
-    featuredRefAa: 'L',
+    featuredRefAa: 'S',
     featuredAltAa: 'P',
     sortOrder: 5,
   },
   {
     accession: 'Q07817',
-    symbol: 'BCL2L11',
-    name: 'Bcl-2-like protein 11',
+    symbol: 'BCL2L1',
+    name: 'Bcl-2-like protein 1',
     blurb:
-      'A BH3-only apoptosis effector with an unstructured N-terminal tail, so early positions have no annotated structure to lean on.',
+      'The anti-apoptotic member of the Bcl-2 family: a four-helix bundle with a disordered N-terminal region, so positions either side of the bundle are scored on a different basis. UniProt accession Q07817 is BCL2L1, not BCL2L11.',
     featuredPosition: 96,
-    featuredRefAa: 'S',
-    featuredAltAa: 'R',
+    featuredRefAa: 'E',
+    featuredAltAa: 'K',
     sortOrder: 6,
   },
   {
@@ -187,7 +202,7 @@ export const CATALOG_SEED: Array<{
     blurb:
       'A constitutive chaperone with long annotated helices. Included so the plate has at least one entry that should stay on the ground.',
     featuredPosition: 496,
-    featuredRefAa: 'F',
+    featuredRefAa: 'N',
     featuredAltAa: 'S',
     sortOrder: 7,
   },
@@ -198,8 +213,8 @@ export const CATALOG_SEED: Array<{
     blurb:
       'A beta-tubulin. Dominated by a continuous annotated helix, which makes it a clean control for the structural-context factor.',
     featuredPosition: 172,
-    featuredRefAa: 'E',
-    featuredAltAa: 'K',
+    featuredRefAa: 'S',
+    featuredAltAa: 'P',
     sortOrder: 8,
   },
 ];
@@ -223,6 +238,60 @@ export const CORRECTIONS: Array<{ id: string; statements: string[] }> = [
       `update gene_catalog set blurb = 'The double-strand break repair scaffold. A zinc-finger RING domain early in the chain followed by a long coiled-coil, so a substitution inside the domain and one in the tail are genuinely different problems. Its curated annotations describe function, not just position.' where accession = 'P38398'`,
     ],
   },
+  {
+    id: '0005_catalog_reference_residues',
+    statements: [
+      // Five of the eight featured positions named a reference residue that the
+      // retrieved coding sequence does not encode: STAT1 31 is R not V, YWHAB
+      // 60 is S not L, BCL2L1 96 is E not S, HSP90AB1 496 is N not F, and TUBB
+      // 172 is S not E. Two of them also asked for substitutions a single base
+      // change cannot make, so those requests failed outright. Each reference
+      // below was read back off the CDS rather than assumed, and
+      // services/assays.ts now refuses any reference that disagrees with the
+      // sequence, so this class of drift cannot ship again quietly.
+      `update gene_catalog set featured_ref_aa = 'R' where accession = 'P42224'`,
+      `update gene_catalog set featured_ref_aa = 'S' where accession = 'P31946'`,
+      `update gene_catalog set featured_ref_aa = 'E' where accession = 'Q07817'`,
+      `update gene_catalog set featured_ref_aa = 'N' where accession = 'P08238'`,
+      `update gene_catalog set featured_ref_aa = 'S' where accession = 'P07437'`,
+
+      // Q07817 is BCL2L1, "Bcl-2-like protein 1". It was seeded as BCL2L11,
+      // "Bcl-2-like protein 11", which is a different protein, and the blurb
+      // described a BH3-only effector rather than the anti-apoptotic inhibitor.
+      `update gene_catalog set symbol = 'BCL2L1' where accession = 'Q07817'`,
+      `update gene_catalog set name = 'Bcl-2-like protein 1' where accession = 'Q07817'`,
+      `update gene_catalog set blurb = 'The anti-apoptotic member of the Bcl-2 family: a four-helix bundle with a disordered N-terminal region, so positions either side of the bundle are scored on a different basis. UniProt accession Q07817 is BCL2L1, not BCL2L11.' where accession = 'Q07817'`,
+    ],
+  },
+  {
+    // Separate from 0005 on purpose. A migration is recorded by id, so editing
+    // the SQL of one that has already run changes nothing on any existing
+    // database; only a new id applies. These two statements were first written
+    // into 0005 after it had already shipped, and silently did nothing.
+    id: '0006_catalog_alternate_residues',
+    statements: [
+      // The same two entries also asked for substitutions a single base change
+      // cannot make: Glu96 cannot become Arg, and Ser172 cannot become Lys. Both
+      // requests failed with "no single-nucleotide substitution at this codon".
+      // The replacements are reachable and chemically instructive: Glu to Lys is
+      // a charge reversal, and Ser to Pro is a helix breaker in a protein the
+      // catalogue describes as dominated by a continuous annotated helix.
+      `update gene_catalog set featured_alt_aa = 'K' where accession = 'Q07817'`,
+      `update gene_catalog set featured_alt_aa = 'P' where accession = 'P07437'`,
+    ],
+  },
+];
+
+/**
+ * Every migration, schema first and then data corrections.
+ *
+ * The two groups live apart because they answer different questions: MIGRATIONS
+ * builds shape, CORRECTIONS repairs content that an older release already wrote.
+ * Both are idempotent and both are recorded in the same table.
+ */
+export const ALL_MIGRATIONS: Array<{ id: string; statements: string[] }> = [
+  ...MIGRATIONS,
+  ...CORRECTIONS,
 ];
 
 export async function migrate(db: Db): Promise<string[]> {
@@ -238,7 +307,7 @@ export async function migrate(db: Db): Promise<string[]> {
      )`,
   );
 
-  for (const migration of [...MIGRATIONS, ...CORRECTIONS]) {
+  for (const migration of ALL_MIGRATIONS) {
     const existing = await db.query<{ id: string }>(
       `select id from schema_migrations where id = $1`,
       [migration.id],
@@ -292,4 +361,13 @@ export async function ensureSchema(db: Db): Promise<void> {
   await seedCatalog(db);
 }
 
-export const LATEST_MIGRATION = [...MIGRATIONS, ...CORRECTIONS].at(-1)!.id;
+/**
+ * The highest migration id that has been defined, compared numerically.
+ *
+ * Taking the last array element instead would report the newest data correction
+ * while ignoring a newer schema migration appended to the group above it, which
+ * is exactly the kind of stale report that makes a health check lie.
+ */
+export const LATEST_MIGRATION = ALL_MIGRATIONS.map((m) => m.id).sort(
+  (a, b) => Number.parseInt(a, 10) - Number.parseInt(b, 10),
+).at(-1)!;
