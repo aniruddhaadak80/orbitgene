@@ -227,7 +227,16 @@ async function main() {
     body: JSON.stringify({ accession: 'P04637', proteinPosition: 175, refAa: 'R', altAa: 'H' }),
   });
   const tp53Clinical = tp53.json?.clinical;
-  if (tp53Clinical?.status === 'unavailable') {
+
+  if (tp53.status !== 200 || !tp53Clinical) {
+    // Reporting "undefined" here once told me nothing. Say what actually came
+    // back, so the next failure is diagnosable from the log alone.
+    check(
+      'TP53 R175H score request',
+      false,
+      `status ${tp53.status} ${tp53.text.slice(0, 180).replace(/\s+/g, ' ')}`,
+    );
+  } else if (tp53Clinical.status === 'unavailable') {
     check(
       'TP53 R175H ClinVar check',
       true,
@@ -236,10 +245,10 @@ async function main() {
   } else {
     check(
       'a known ClinVar substitution resolves (TP53 R175H)',
-      tp53Clinical?.status === 'reported' &&
-        tp53Clinical?.hit?.accession === 'VCV000012374' &&
-        /pathogenic/i.test(tp53Clinical?.hit?.significance ?? ''),
-      `${tp53Clinical?.status} ${tp53Clinical?.hit?.significance ?? ''} ${tp53Clinical?.hit?.accession ?? ''}`,
+      tp53Clinical.status === 'reported' &&
+        tp53Clinical.hit?.accession === 'VCV000012374' &&
+        /pathogenic/i.test(tp53Clinical.hit?.significance ?? ''),
+      `${tp53Clinical.status} ${tp53Clinical.hit?.significance ?? ''} ${tp53Clinical.hit?.accession ?? ''}`,
     );
   }
   const scoreSources = scored.json?.sources ?? [];
