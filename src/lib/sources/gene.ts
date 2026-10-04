@@ -158,13 +158,16 @@ export async function loadGeneProfile(
   try {
     return await cached(key, TTL.gene, () => buildLive(bare, options.mrna));
   } catch (error) {
-    // Logged rather than returned: the caller only ever sees the generic
-    // message, so without this the deployment log cannot explain a fallback.
+    // The reason travels with the message rather than only going to the log. A
+    // deployment that cannot reach UniProt and a deployment whose database is
+    // unreachable both produced a bare "no sealed sample exists", which sent the
+    // investigation in the wrong direction entirely.
+    const reason = error instanceof Error ? error.message : String(error);
     console.error(`[orbitgene] live retrieval failed for ${bare}:`, error);
     const sealed = sealedProfile(bare);
     if (sealed) return sealed;
     throw new Error(
-      `Could not retrieve ${bare} from UniProt or RefSeq, and no sealed sample exists for it.`,
+      `Could not retrieve ${bare} from UniProt or RefSeq (${reason}), and no sealed sample exists for it.`,
     );
   }
 }

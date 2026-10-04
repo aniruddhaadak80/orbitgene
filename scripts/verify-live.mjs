@@ -112,34 +112,32 @@ async function discoverSubstitution(accession) {
 async function main() {
   console.log(`\nVerifying ${BASE}\n${'='.repeat(60)}`);
 
-  /* 0. Can this host reach the biology at all? */
+  /* 0. Can the application reach the biology from where it is running? */
+  //
+  // Probed through the app rather than with a plain fetch from this process. A
+  // bare fetch to UniProt succeeding while the app's own fetch fails is exactly
+  // what happened on a CI runner, and probing around the app would have reported
+  // the network as fine and then asserted against it anyway.
   const upstreamReachable = ['1', 'true', 'yes'].includes(
     (process.env.SIMULATE_NO_UPSTREAM ?? '').toLowerCase(),
   )
     ? false
     : await (async () => {
-        for (const host of [
-          'https://rest.uniprot.org/uniprotkb/P04637.json',
-          'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/einfo.fcgi',
-        ]) {
-          try {
-            const probe = await fetch(host, { signal: AbortSignal.timeout(15000) });
-            if (probe.ok) return true;
-          } catch {
-            // try the next one
-          }
+        for (const accession of ['P04637', 'P38398']) {
+          const probe = await req(`/api/catalog?accession=${accession}`);
+          if (probe.status === 200 && (probe.json?.gene?.cdsLength ?? 0) > 0) return true;
         }
         return false;
       })();
 
   if (upstreamReachable) {
-    console.log('upstream reachable: UniProt and NCBI both answered');
+    console.log('upstream reachable: the app itself resolved UniProt and RefSeq');
   } else if (REQUIRE_UPSTREAM) {
     console.error('upstream unreachable and REQUIRE_UPSTREAM is set, so the run cannot continue');
     process.exit(1);
   } else {
     console.log(
-      'upstream unreachable from this host; live-data assertions will be reported as skipped.\n' +
+      'upstream unreachable from the app; live-data assertions will be reported as skipped.\n' +
         '  Everything else still has to pass. Set REQUIRE_UPSTREAM=1 to make this fatal.',
     );
   }
@@ -201,7 +199,7 @@ async function main() {
     check('coding sequence retrieved', (geneCtx.json?.gene?.cdsLength ?? 0) > 0, `${geneCtx.json?.gene?.cdsLength} nt`);
     check('protein sequence retrieved', (geneCtx.json?.gene?.proteinLength ?? 0) > 0, `${geneCtx.json?.gene?.proteinLength} aa`);
   } else {
-    console.log('  SKIP  live gene-context assertions (upstream unreachable from this host)');
+    console.log('  SKIP  live gene-context assertions (the app cannot reach UniProt or RefSeq from here)');
   }
 
   /* 4. Engine: create */
