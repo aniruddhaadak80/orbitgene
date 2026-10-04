@@ -429,12 +429,14 @@ async function main() {
 
   const mcpManifest = await req('/mcp.json');
   check('MCP manifest is published', mcpManifest.status === 200 && typeof mcpManifest.json?.name === 'string', mcpManifest.json?.name);
-  const manifestUrl = String(mcpManifest.json?.remotes?.[0]?.url ?? '');
-  if (!manifestUrl.startsWith(BASE)) {
-    console.log('  SKIP  MCP manifest points at the live endpoint (deployment URL mismatch)');
-  } else {
-    check('MCP manifest points at the live endpoint', true, manifestUrl);
-  }
+  // Deliberately a hard failure rather than a skip. A manifest that advertises a
+  // different endpoint than the one serving it is a real defect: an agent that
+  // installed this manifest would talk to a stale deployment and never say so.
+  check(
+    'MCP manifest points at the live endpoint',
+    String(mcpManifest.json?.remotes?.[0]?.url ?? '').startsWith(BASE),
+    mcpManifest.json?.remotes?.[0]?.url,
+  );
 
   /* 16. Clean up the agent-created record so a rerun starts fresh */
   const agentRecord = agentAssay?.id ? await req(`/api/assays/${agentAssay.id}`) : null;
