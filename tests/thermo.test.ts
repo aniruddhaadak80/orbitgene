@@ -203,6 +203,26 @@ describe('deriveProbe', () => {
     assert.equal(probe.sequence.length, 21);
     assert.ok(probe.sequence.includes('N'));
   });
+
+  test('pads on the 3-prime end so the codon offset still lands on the codon', () => {
+    // The window is centred on the codon, so a CDS shorter than the window is missing
+    // bases at its 3' end. Padding the 5' end instead shifted every real base right and
+    // left `codonOffset` pointing into the padding.
+    const probe = deriveProbe('ATG', 1, 21);
+    assert.equal(probe.sequence, `ATG${'N'.repeat(18)}`);
+    assert.equal(probe.codonOffset, 0);
+    assert.equal(probe.sequence.slice(probe.codonOffset, probe.codonOffset + 3), 'ATG');
+  });
+
+  test('keeps the codon offset correct for a short CDS and a later codon', () => {
+    const cds = 'ATGAAACCCGGG';
+    const probe = deriveProbe(cds, 3, 20);
+    assert.equal(probe.length, 20);
+    assert.equal(
+      probe.sequence.slice(probe.codonOffset, probe.codonOffset + 3),
+      cds.slice((3 - 1) * 3, (3 - 1) * 3 + 3),
+    );
+  });
 });
 
 describe('compareProbeThermodynamics', () => {
