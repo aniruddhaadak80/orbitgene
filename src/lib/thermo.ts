@@ -177,7 +177,11 @@ export function deriveProbe(
   if (end - start < want) start = Math.max(0, end - want);
 
   const raw = upper.slice(start, end);
-  const sequence = raw.padStart(want, 'N').padEnd(want, 'N');
+  // The window is centred on the codon, so when the CDS is shorter than the window the
+  // missing bases are at its 3' end -- the window ran off the end of the CDS. Padding the
+  // 5' end instead would shift every real base to the right and leave `codonOffset`
+  // pointing into the padding rather than at the codon.
+  const sequence = raw.length < want ? raw.padEnd(want, 'N') : raw;
   return { sequence, codonOffset: codonStart - start, length: want };
 }
 
