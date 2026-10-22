@@ -160,7 +160,10 @@ const s = (typeof seq === 'string' ? seq : '').toUpperCase().replace(/[\s-]/g, '
  *
  * Length is clamped to 15..40 nt and to what the CDS can actually supply; the
  * window is padded with N when the CDS is shorter than requested so callers
- * always receive a fixed-width probe to draw.
+ * always receive a fixed-width probe to draw. The padding goes on the 3' end,
+ * because that is the end the window ran off: padding the 5' end instead would
+ * shift every real base to the right and leave `codonOffset` pointing into the
+ * padding rather than at the codon.
  */
 export function deriveProbe(
   cds: string,
