@@ -10,6 +10,14 @@
 export const UPSTREAM_TIMEOUT_MS = 12_000;
 export const UPSTREAM_RETRIES = 2;
 
+/**
+ * NCBI's usage policy asks for no more than three requests a second without an
+ * API key, and answers a burst with `429`. Resolving one gene fans out to two
+ * dozen E-utilities calls, which is well past that limit on its own, so the
+ * calls are serialised at this interval instead of being fired together.
+ */
+export const NCBI_MIN_INTERVAL_MS = 350;
+
 /** Only these hosts are ever contacted. */
 const ALLOWED_HOSTS = new Set([
   'rest.uniprot.org',
@@ -40,10 +48,24 @@ function assertAllowed(url: string): URL {
   return parsed;
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(() => resolve(), ms));
+
+/** Resolves once the caller may make the next E-utilities request. */
+let ncbiTurn: Promise<void> = Promise.resolve();
+
+function paceNcbi(url: string): Promise<void> {
+  if (new URL(url).hostname !== 'eutils.ncbi.nlm.nih.gov') return Promise.resolve();
+  const turn = ncbiTurn.then(() => sleep(NCBI_MIN_INTERVAL_MS));
+  ncbiTurn = turn.then(
+    () => undefined,
+    () => undefined,
+  );
+  return turn;
+}
 
 async function once(url: string): Promise<string> {
   assertAllowed(url);
+  await paceNcbi(url);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
   try {
@@ -65,8 +87,10 @@ async function once(url: string): Promise<string> {
 }
 
 /**
- * Fetches text with bounded retries. Network blips and 5xx responses are retried;
- * a 4xx is not, because repeating a malformed request cannot help.
+ * Fetches text with bounded retries. Network blips, 5xx responses and `429` are
+ * retried; any other 4xx is not, because repeating a malformed request cannot
+ * help. A rate-limit answer backs off harder than a server error, since the
+ * upstream is explicitly asking for time.
  */
 export async function fetchText(url: string, label: string): Promise<string> {
   let lastError: unknown;
@@ -76,8 +100,11 @@ export async function fetchText(url: string, label: string): Promise<string> {
     } catch (error) {
       lastError = error;
       const status = error instanceof UpstreamError ? error.status : undefined;
-      if (status && status >= 400 && status < 500) break;
-      if (attempt < UPSTREAM_RETRIES) await sleep(250 * (attempt + 1));
+      if (status !== undefined && status >= 400 && status < 500 && status !== 429) break;
+      if (attempt < UPSTREAM_RETRIES) {
+        const backoff = status === 429 ? 1_000 * (attempt + 1) : 250 * (attempt + 1);
+        await sleep(backoff);
+      }
     }
   }
   throw new UpstreamError(
